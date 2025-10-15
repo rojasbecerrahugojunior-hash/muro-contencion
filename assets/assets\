@@ -1,0 +1,8 @@
+from pathlib import Path
+import streamlit as st
+
+ROOT = Path(__file__).parent
+theme = st.get_option("theme.base") or "light"
+img_name = "retaining_wall_ref_light_nooverlap.png"
+
+st.image(str(ROOT / "assets" / img_name), use_container_width=True)
