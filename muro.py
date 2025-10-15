@@ -1,11 +1,28 @@
-# Estructuras de Contención — Streamlit (dashboard con tabs + CSV + modo libro)
+# Estructuras de Contención — Streamlit (dashboard con tabs + CSV + modo libro + chequeos)
 # Jaky / Rankine / Coulomb; c-φ y grieta; NF; q uniforme y franja; Sísmico (MO).
-# Diagramas, métricas, desglose y tabla z–σh exportable.
+# Diagramas, métricas, desglose, tabla z–σh y chequeos de estabilidad (FS y presiones).
 
 import streamlit as st
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from pathlib import Path
+import streamlit as st
+
+ROOT = Path(__file__).parent
+theme = st.get_option("theme.base") or "light"
+img_name = (
+    "retaining_wall_ref_dark_nooverlap.png"
+    if theme == "dark"
+    else "retaining_wall_ref_light_nooverlap.png"
+)
+
+st.image(
+    str(ROOT / img_name),
+    use_container_width=True,  # ✅ nuevo parámetro
+    caption="Esquema de parámetros: H, B, b_t, b_h, t_b, t_st, t_sb, β, q, a, b, NF (hw), Ea, Es, μ·N, Pasivo.",
+)
+
 
 st.set_page_config(page_title="Estructuras de Contención", layout="wide")
 
@@ -107,7 +124,7 @@ def Kae_MO(
     return float(num / den)
 
 
-# Sobrecarga de franja (2D, fórmula en radianes)
+# Sobrecarga de franja (2D)
 def vertical_stress_strip_at_wall(z, a: float, b: float, q: float):
     """Δσv = (q/π)[atan((a+b)/z) - atan(a/z)]"""
     z = np.maximum(np.array(z, dtype=float), 1e-6)  # evita z=0
@@ -115,30 +132,44 @@ def vertical_stress_strip_at_wall(z, a: float, b: float, q: float):
 
 
 # ----------------------------- UI — Sidebar -----------------------------
-st.title("Estructuras de Contención")
-
 with st.sidebar:
     st.header("Geometría & Método")
     H = st.number_input(
-        "Altura del muro H [m]", value=6.00, min_value=0.50, max_value=60.00, **DEC2
+        "Altura del muro H [m]",
+        value=6.00,
+        min_value=0.50,
+        max_value=60.00,
+        key="H_key",
+        **DEC2,
     )
-    condicion = st.selectbox("Condición", ["Reposo (K₀)", "Activa (Kₐ)", "Pasiva (Kₚ)"])
-    metodo = st.selectbox("Método", ["Rankine", "Coulomb"])
+    condicion = st.selectbox(
+        "Condición", ["Reposo (K₀)", "Activa (Kₐ)", "Pasiva (Kₚ)"], key="cond_key"
+    )
+    metodo = st.selectbox("Método", ["Rankine", "Coulomb"], key="meth_key")
     beta = st.number_input(
         "β (talud del relleno) [°] (0 = horizontal)",
         value=0.00,
         min_value=0.00,
         max_value=30.00,
+        key="beta_key",
         **DEC2,
     )
 
     st.divider()
     st.header("Controles de caso")
-    use_cphi = st.checkbox("Usar cohesión (c–φ) en Rankine Activa", value=True)
-    apply_tc = st.checkbox("Aplicar grieta de tensión (truncar σh<0)", value=True)
-    crack_water = st.checkbox("Agua llenando la grieta (si existe)", value=False)
+    use_cphi = st.checkbox(
+        "Usar cohesión (c–φ) en Rankine Activa", value=True, key="use_cphi_key"
+    )
+    apply_tc = st.checkbox(
+        "Aplicar grieta de tensión (truncar σh<0)", value=True, key="apply_tc_key"
+    )
+    crack_water = st.checkbox(
+        "Agua llenando la grieta (si existe)", value=False, key="crack_water_key"
+    )
     show_before = st.checkbox("Mostrar métricas ANTES (con tracción)", value=True)
-    modo_libro = st.checkbox("Modo libro (√Ka=0.625 en Rankine Activa)", value=False)
+    modo_libro = st.checkbox(
+        "Modo libro (√Ka=0.625 en Rankine Activa)", value=False, key="modo_libro_key"
+    )
 
     st.divider()
     st.header("Estratos (de arriba hacia abajo)")
@@ -157,6 +188,7 @@ with st.sidebar:
         default_layers,
         num_rows="dynamic",
         use_container_width=True,
+        key="layers_key",
         column_config={
             "z_inf": st.column_config.NumberColumn(
                 "Profundidad z_inferior [m]", step=0.01, min_value=0.00, format="%.2f"
@@ -180,7 +212,7 @@ with st.sidebar:
     )
 
     st.header("Nivel freático")
-    nf_debajo = st.checkbox("NF por debajo de la base", value=True)
+    nf_debajo = st.checkbox("NF por debajo de la base", value=True, key="nf_debajo_key")
     if nf_debajo:
         hw = H + 1.00  # evita hidrostática
     else:
@@ -189,43 +221,96 @@ with st.sidebar:
             value=min(H, 3.00),
             min_value=0.00,
             max_value=1000.00,
+            key="hw_key",
             **DEC2,
         )
     drenaje_ok = st.checkbox(
-        "Drenaje eficaz (sin presión hidrostática contra el muro)", value=True
+        "Drenaje eficaz (sin presión hidrostática contra el muro)",
+        value=True,
+        key="drenaje_ok_key",
     )
 
     st.header("Sobrecargas")
-    use_q_uni = st.checkbox("Incluir q uniforme", value=False)
+    use_q_uni = st.checkbox("Incluir q uniforme", value=False, key="use_q_uni_key")
     q_uniforme = st.number_input(
-        "q uniforme [kN/m²]", value=0.00, min_value=0.00, max_value=5000.00, **DEC2
+        "q uniforme [kN/m²]",
+        value=0.00,
+        min_value=0.00,
+        max_value=5000.00,
+        key="q_uniforme_key",
+        **DEC2,
     )
-    use_strip = st.checkbox("Incluir franja finita", value=False)
+    use_strip = st.checkbox("Incluir franja finita", value=False, key="use_strip_key")
     a = st.number_input(
         "Distancia a la pared a [m]",
         value=0.00,
         min_value=0.00,
         max_value=60.00,
+        key="a_key",
         **DEC2,
     )
     b = st.number_input(
-        "Ancho de franja b [m]", value=0.00, min_value=0.00, max_value=60.00, **DEC2
+        "Ancho de franja b [m]",
+        value=0.00,
+        min_value=0.00,
+        max_value=60.00,
+        key="b_key",
+        **DEC2,
     )
     q_strip = st.number_input(
-        "q de franja [kN/m²]", value=0.00, min_value=0.00, max_value=5000.00, **DEC2
+        "q de franja [kN/m²]",
+        value=0.00,
+        min_value=0.00,
+        max_value=5000.00,
+        key="q_strip_key",
+        **DEC2,
     )
 
     st.header("Sísmico (Mononobe–Okabe)")
-    sismo = st.checkbox("Activar análisis pseudo-estático", value=False)
-    kh = st.number_input("k_h", value=0.20, min_value=0.00, max_value=0.50, **DEC2)
-    kv = st.number_input("k_v", value=0.00, min_value=-0.30, max_value=0.30, **DEC2)
+    sismo = st.checkbox(
+        "Activar análisis pseudo-estático", value=False, key="sismo_key"
+    )
+    kh = st.number_input(
+        "k_h", value=0.20, min_value=0.00, max_value=0.50, key="kh_key", **DEC2
+    )
+    kv = st.number_input(
+        "k_v", value=0.00, min_value=-0.30, max_value=0.30, key="kv_key", **DEC2
+    )
 
     st.divider()
     st.header("Precisión & tamaño")
-    dec_out = st.slider("Decimales en resultados", 2, 6, 4, 1)
-    nz = st.slider("Resolución vertical (n puntos)", 800, 6000, 2800, 200)
-    w_px = st.slider("Ancho gráfico [px]", 360, 700, 420, 10)
-    h_px = st.slider("Alto gráfico [px]", 320, 600, 360, 10)
+    dec_out = st.slider(
+        "Decimales en resultados",
+        2,
+        6,
+        st.session_state.get("dec_out_key", 4),
+        1,
+        key="dec_out_key",
+    )
+    nz = st.slider(
+        "Resolución vertical (n puntos)",
+        800,
+        6000,
+        st.session_state.get("nz_key", 2800),
+        200,
+        key="nz_key",
+    )
+    w_px = st.slider(
+        "Ancho gráfico [px]",
+        360,
+        700,
+        st.session_state.get("w_px_key", 420),
+        10,
+        key="w_px_key",
+    )
+    h_px = st.slider(
+        "Alto gráfico [px]",
+        320,
+        600,
+        st.session_state.get("h_px_key", 360),
+        10,
+        key="h_px_key",
+    )
     fmt = f"{{:.{dec_out}f}}"
 
 # ----------------------------- Preprocesado de capas -----------------------------
@@ -293,7 +378,6 @@ def build_profiles(
     """Devuelve z, K(z), σ'v(z), σh_before, σh_after, z_tc."""
     z = np.linspace(0.0, H, nz)
     dz = z[1] - z[0]
-
     gamma_eff = np.zeros_like(z)
     phi_z = np.zeros_like(z)
     delta_z = np.zeros_like(z)
@@ -321,7 +405,6 @@ def build_profiles(
         Kz[:] = (0.625) ** 2
 
     sigma_h = Kz * sigma_v  # base sin cohesión
-
     if use_cphi and condicion == "Activa (Kₐ)" and metodo == "Rankine":
         sqrtK = np.sqrt(np.clip(Kz, 0.0, None))
         sigma_h = sigma_h - 2.0 * c_z * sqrtK
@@ -331,7 +414,6 @@ def build_profiles(
         np.maximum(sigma_h_before, 0.0) if apply_tc else sigma_h_before.copy()
     )
 
-    # z_tc: primera z con σh>=0 (desde coronación)
     z_tc = np.nan
     if apply_tc:
         nonneg = np.where(sigma_h_before >= 0.0)[0]
@@ -371,7 +453,7 @@ sigma_h_strip = np.zeros_like(z)
 if use_strip and (b > 0.0) and (q_strip > 0.0):
     sigma_h_strip = K_surf * vertical_stress_strip_at_wall(z, a, b, q_strip)
 
-# Hidrostática (si NO hay drenaje) — actúa directo, no por K
+# Hidrostática (si NO hay drenaje) — actúa directo
 sigma_h_w = np.zeros_like(z)
 if (not drenaje_ok) and (hw < H):
     mask_w = z >= hw
@@ -447,10 +529,9 @@ M_total = P_after * (yb_after if np.isfinite(yb_after) else 0.0) + (
 )
 yb_total = (M_total / P_total) if P_total > 0 else np.nan
 
-# ----------------------------- SALIDA — Tabs -----------------------------
+# ----------------------------- SALIDA — Tabs (empujes) -----------------------------
 st.subheader(f"{metodo} — {condicion}")
 
-# Chips de estado
 chip_cols = st.columns(3)
 chip_cols[0].markdown(
     f"✅ **Cohesión c–φ:** {'ON' if (use_cphi and metodo=='Rankine' and condicion=='Activa (Kₐ)') else 'OFF'}"
@@ -479,10 +560,6 @@ with tab_res:
             "ȳ ANTES [m desde base]",
             fmt.format(0.0 if not np.isfinite(yb_before) else yb_before),
         )
-        if np.isfinite(yb_before) and (yb_before < 0):
-            st.warning(
-                "ȳ ANTES es negativa (no física) por tracción arriba. Use DESPUÉS para diseño."
-            )
         st.divider()
 
     c1, c2, c3 = st.columns(3)
@@ -504,7 +581,6 @@ with tab_res:
         "“DESPUÉS” = suelo sin tracción (si aplica) + q + franja + NF (+ agua si Drenaje=OFF)."
     )
 
-    # Barras compactas (dpi alto = trazo nítido)
     fig0, ax0 = plt.subplots(figsize=(w_px / 96.0, (h_px - 40) / 96.0), dpi=120)
     ax0.bar(["Estático (DESPUÉS)", "Sísmico", "TOTAL"], [P_after, P_seis, P_total])
     ax0.set_ylabel("kN/m")
@@ -545,7 +621,6 @@ with tab_diag:
     with colL:
         st.pyplot(fig, use_container_width=False)
 
-    # Tabla compacta por cada metro al costado
     z_metros = np.arange(0.0, H + 0.0001, 1.0)
 
     def _interp(arr):
@@ -561,12 +636,10 @@ with tab_diag:
             "σh DESPUÉS [kPa]": _interp(sigma_total_after),
         }
     ).round(dec_out)
-
     with colR:
         st.dataframe(df_side, use_container_width=True, height=int(h_px))
 
 with tab_tabla:
-    # Tabla completa con componentes
     z_metros = np.arange(0.0, H + 0.0001, 1.0)
 
     def _interp(arr):
@@ -588,14 +661,235 @@ with tab_tabla:
             "σh TOTAL DESPUÉS [kPa]": _interp(sigma_total_after),
         }
     ).round(dec_out)
-
     st.dataframe(df, use_container_width=True, height=560)
-
-    # Descarga CSV
     csv_bytes = df.to_csv(index=False).encode("utf-8")
     st.download_button(
-        label="⬇️ Descargar tabla z–σh (CSV)",
+        "⬇️ Descargar tabla z–σh (CSV)",
         data=csv_bytes,
         file_name="tabla_z_sigmah.csv",
         mime="text/csv",
+    )
+
+# ============================= CHEQUEOS GEOTÉCNICOS / ESTRUCTURALES =============================
+st.divider()
+st.subheader("🧱 Estabilidad y Presiones en Cimentación")
+
+with st.sidebar:
+    st.header("Geometría del muro (para estabilidad)")
+    st.caption("Unidades en m y kN/m³. Concreto 24 kN/m³ por defecto.")
+    B = st.number_input(
+        "Ancho total de base B", value=4.60, min_value=0.50, step=0.01, key="geom_B"
+    )
+    bt = st.number_input(
+        "Ancho de puntera (toe) b_t",
+        value=1.30,
+        min_value=0.00,
+        step=0.01,
+        key="geom_bt",
+    )
+    t_b = st.number_input(
+        "Espesor de losa de base t_b",
+        value=0.70,
+        min_value=0.10,
+        step=0.01,
+        key="geom_tb",
+    )
+
+    st.caption("Alma (muro-cantilever) — espesor variable lineal")
+    t_st = st.number_input(
+        "Espesor del alma en coronación t_st",
+        value=0.40,
+        min_value=0.10,
+        step=0.01,
+        key="geom_tst",
+    )
+    t_sb = st.number_input(
+        "Espesor del alma en la base t_sb",
+        value=0.80,
+        min_value=0.20,
+        step=0.01,
+        key="geom_tsb",
+    )
+
+    bh = st.number_input(
+        "Ancho de talón (heel) b_h",
+        value=max(0.10, 2.50),
+        min_value=0.00,
+        step=0.01,
+        key="geom_bh",
+    )
+    gamma_c = st.number_input(
+        "γ del concreto [kN/m³]",
+        value=24.00,
+        min_value=20.0,
+        max_value=27.0,
+        step=0.1,
+        key="gamma_c_key",
+    )
+
+    st.header("Fricción y capacidad de apoyo")
+    mu_base = st.number_input(
+        "μ base (≈ tan φ_b)",
+        value=0.50,
+        min_value=0.00,
+        max_value=1.20,
+        step=0.01,
+        key="mu_base_key",
+    )
+    include_passive = st.checkbox(
+        "Incluir pasivo en frente de puntera", value=False, key="include_passive_key"
+    )
+    Kp_front = st.number_input(
+        "Kp frente (si aplica)",
+        value=3.00,
+        min_value=0.00,
+        step=0.1,
+        key="Kp_front_key",
+    )
+    z_front = st.number_input(
+        "Altura de suelo confinado frente a puntera [m]",
+        value=0.50,
+        min_value=0.00,
+        step=0.05,
+        key="z_front_key",
+    )
+    red_passive = st.number_input(
+        "Reducción pasivo (%)",
+        value=50,
+        min_value=0,
+        max_value=100,
+        step=5,
+        key="red_passive_key",
+    )
+    qadm = st.number_input(
+        "q admisible del suelo [kPa]",
+        value=300.0,
+        min_value=50.0,
+        step=5.0,
+        key="qadm_key",
+    )
+
+# --- pesos (por metro) ---
+# Losa de base (rectángulo B x t_b)
+W_base = gamma_c * B * t_b
+xW_base = B / 2.0  # centroide desde la puntera
+
+# Alma (trapecio vertical: espesor t_st en cima y t_sb en base; altura H)
+W_stem = gamma_c * 0.5 * (t_st + t_sb) * H
+# Centroide del alma desde la cara de PUNTERA (toe). El alma se apoya sobre la losa, bordeado por la puntera bt:
+xW_stem = bt + t_sb / 2.0
+
+# Peso del suelo sobre el talón (usa σ'v(H) integrado por capas)
+W_soil_heel = float(sigma_v[-1]) * bh
+xW_soil_heel = bt + t_sb + bh / 2.0
+
+# Peso del suelo sobre la puntera (si hay relleno delante; aquí 0 por defecto)
+W_soil_toe = 0.0
+xW_soil_toe = bt / 2.0
+
+# Suma de verticales
+N_static = W_base + W_stem + W_soil_heel + W_soil_toe
+
+# --- fuerzas horizontales ---
+P_H = P_total
+a_P = yb_total if np.isfinite(yb_total) else (H / 3.0)  # brazo desde la base
+
+# --- momentos respecto al borde de la PUNTERA (toe) ---
+# Convención: estabilizadores (pesos) positivos; volcamiento por P_H negativo
+M_res = (
+    W_base * xW_base
+    + W_stem * xW_stem
+    + W_soil_heel * xW_soil_heel
+    + W_soil_toe * xW_soil_toe
+)
+M_ot = P_H * a_P
+FS_volteo = (M_res / M_ot) if M_ot > 0 else np.nan
+
+# --- deslizamiento ---
+P_passive = 0.0
+if include_passive and (Kp_front > 0.0) and (z_front > 0.0):
+    gamma_front = layers_sorted[0]["gamma"]  # capa superior (sin NF)
+    P_passive = 0.5 * Kp_front * gamma_front * (z_front**2)
+    P_passive *= 1.0 - red_passive / 100.0
+
+R_fric = mu_base * N_static
+FS_desl = (R_fric + P_passive) / P_H if P_H > 0 else np.nan
+
+# --- resultante y presiones en la base ---
+# Posición de la resultante desde la puntera:
+x_R = (M_res - M_ot) / N_static if N_static > 0 else np.nan
+# Excentricidad respecto al centro de la base (positiva hacia el talón):
+e = (x_R - B / 2.0) if np.isfinite(x_R) else np.nan
+
+# Presiones bajo la base (lineales). q_toe/heel en kPa.
+q_med = N_static / B if B > 0 else np.nan
+if np.isfinite(e):
+    q_toe = q_med * (1.0 + 6.0 * (e / B))
+    q_heel = q_med * (1.0 - 6.0 * (e / B))
+    q_max = max(q_toe, q_heel)
+    q_min = min(q_toe, q_heel)
+else:
+    q_toe = q_heel = q_max = q_min = np.nan
+
+no_traccion = (q_min >= -1e-6) if np.isfinite(q_min) else False
+dentro_qadm = (q_max <= qadm + 1e-6) if np.isfinite(q_max) else False
+tercio_medio = (abs(e) <= B / 6.0) if np.isfinite(e) else False
+
+# --- OUTPUT (chequeos) ---
+tab_res2, tab_press = st.tabs(["✅ Chequeos", "📐 Detalle & brazos"])
+
+with tab_res2:
+    c1, c2, c3 = st.columns(3)
+    c1.metric("FS deslizamiento", f"{FS_desl:.3f}" if np.isfinite(FS_desl) else "—")
+    c2.metric("FS volteo", f"{FS_volteo:.3f}" if np.isfinite(FS_volteo) else "—")
+    c3.metric(
+        "N (vertical total) [kN/m]", f"{N_static:.2f}" if np.isfinite(N_static) else "—"
+    )
+
+    c4, c5, c6 = st.columns(3)
+    c4.metric("q_min [kPa]", f"{q_min:.1f}" if np.isfinite(q_min) else "—")
+    c5.metric("q_max [kPa]", f"{q_max:.1f}" if np.isfinite(q_max) else "—")
+    c6.metric("q_adm [kPa]", f"{qadm:.1f}")
+
+    st.write(
+        f"**Tensiones**: {'✔️ sin tracción (q_min ≥ 0)' if no_traccion else '⚠️ hay tracción (q_min < 0)'} | "
+        f"{'✔️ q_max ≤ q_adm' if dentro_qadm else '⚠️ q_max > q_adm'} | "
+        f"{'✔️ tercio medio' if tercio_medio else '⚠️ fuera del tercio medio'}"
+    )
+
+    st.caption(
+        "Tip: Si FS_desl es bajo, aumenta μ / añade llave / considera pasivo con reducción.\n"
+        "Si FS_volteo es bajo o hay tracción, aumenta B o b_h, baja t_b (↑peso), o reduce P_H."
+    )
+
+with tab_press:
+    st.markdown(
+        "**Brazos y centroides (desde el borde de puntera a lo largo de la base):**"
+    )
+    dfM = pd.DataFrame(
+        {
+            "Componente": [
+                "Losa base",
+                "Alma",
+                "Suelo sobre talón",
+                "Suelo frente puntera",
+                "Empuje total",
+            ],
+            "F [kN/m]": [W_base, W_stem, W_soil_heel, W_soil_toe, P_H],
+            "Brazo [m]": [xW_base, xW_stem, xW_soil_heel, xW_soil_toe, a_P],
+            "Momento (+res/-volc) [kN·m/m]": [
+                W_base * xW_base,
+                W_stem * xW_stem,
+                W_soil_heel * xW_soil_heel,
+                W_soil_toe * xW_soil_toe,
+                -P_H * a_P,
+            ],
+        }
+    ).round(3)
+    st.dataframe(dfM, use_container_width=True, height=260)
+
+    st.markdown(
+        f"- **x_R** (posición de la resultante desde la puntera): {x_R:.3f} m  \n"
+        f"- **e** (excentricidad respecto al centro): {e:.3f} m  \n"
+        f"- **Regla del tercio medio**: {'✔️ Cumple (|e| ≤ B/6)' if tercio_medio else '⚠️ No cumple'}"
     )
