@@ -3,6 +3,13 @@ import streamlit as st
 
 ROOT = Path(__file__).parent
 theme = st.get_option("theme.base") or "light"
-img_name = "retaining_wall_ref_light_nooverlap.png"
 
-st.image(str(ROOT / "assets" / img_name), use_container_width=True)
+img_name = (
+    "retaining_wall_ref_dark_nooverlap.png"
+    if theme == "dark"
+    else "retaining_wall_ref_light_nooverlap.png"
+)
+
+st.image(str(ROOT / "assets" / img_name), use_container_width=True,
+         caption="Esquema de parámetros: H, B, b_t, b_h, t_b, t_st, t_sb, β, q, a, b, NF (hw), Ea, Es, μ·N, Pasivo.")
+
