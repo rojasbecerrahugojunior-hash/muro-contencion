@@ -11,20 +11,21 @@ import streamlit as st
 
 ROOT = Path(__file__).parent
 theme = st.get_option("theme.base") or "light"
+
 img_name = (
     "retaining_wall_ref_dark_nooverlap.png"
     if theme == "dark"
     else "retaining_wall_ref_light_nooverlap.png"
 )
 
+IMG = ROOT / "assets" / img_name   # <- OJO: ahora apunta a la carpeta assets/
+
 st.image(
-    str(ROOT / img_name),
-    use_container_width=True,  # ✅ nuevo parámetro
-    caption="Esquema de parámetros: H, B, b_t, b_h, t_b, t_st, t_sb, β, q, a, b, NF (hw), Ea, Es, μ·N, Pasivo.",
+    str(IMG),
+    use_container_width=True,
+    caption="Esquema de parámetros: H, B, b_t, b_h, t_b, t_st, t_sb, β, q, a, b, NF (hw), Ea, Es, μ·N, Pasivo."
 )
 
-
-st.set_page_config(page_title="Estructuras de Contención", layout="wide")
 
 # ----------------------------- Constantes & helpers -----------------------------
 GAMMA_W = 9.81  # kN/m³
