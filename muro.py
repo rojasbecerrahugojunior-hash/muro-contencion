@@ -10,13 +10,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent
 theme = st.get_option("theme.base") or "light"
-img_name = "retaining_wall_ref_dark_nooverlap.png" if theme=="dark" else "retaining_wall_ref_light_nooverlap.png"
-st.image(str(ROOT / img_name), use_container_width=True)
 
-IMG = ROOT / ("assets" / Path(img_name) if (ROOT / "assets").exists() else Path(img_name))
-st.write("Ruta imagen:", str(IMG))
-st.write("¿Existe?", IMG.exists())
+img_name = (
+    "retaining_wall_ref_dark_nooverlap.png"
+    if theme == "dark"
+    else "retaining_wall_ref_light_nooverlap.png"
+)
 
+# Usa assets/ si existe; si no, busca en la raíz.
+IMG = (ROOT / "assets" / img_name) if (ROOT / "assets").exists() else (ROOT / img_name)
+
+# (opcional) debug: ver ruta y existencia
+# st.write("Ruta imagen:", str(IMG))
+# st.write("¿Existe?", IMG.exists())
+
+st.image(str(IMG), use_container_width=True,
+         caption="Esquema de parámetros: H, B, b_t, b_h, t_b, t_st, t_sb, β, q, a, b, NF (hw), Ea, Es, μ·N, Pasivo.")
 
 
 # ----------------------------- Constantes & helpers -----------------------------
