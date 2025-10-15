@@ -7,24 +7,16 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
-import streamlit as st
 
 ROOT = Path(__file__).parent
 theme = st.get_option("theme.base") or "light"
+img_name = "retaining_wall_ref_dark_nooverlap.png" if theme=="dark" else "retaining_wall_ref_light_nooverlap.png"
+st.image(str(ROOT / img_name), use_container_width=True)
 
-img_name = (
-    "retaining_wall_ref_dark_nooverlap.png"
-    if theme == "dark"
-    else "retaining_wall_ref_light_nooverlap.png"
-)
+IMG = ROOT / ("assets" / Path(img_name) if (ROOT / "assets").exists() else Path(img_name))
+st.write("Ruta imagen:", str(IMG))
+st.write("¿Existe?", IMG.exists())
 
-IMG = ROOT / "assets" / img_name   # <- OJO: ahora apunta a la carpeta assets/
-
-st.image(
-    str(IMG),
-    use_container_width=True,
-    caption="Esquema de parámetros: H, B, b_t, b_h, t_b, t_st, t_sb, β, q, a, b, NF (hw), Ea, Es, μ·N, Pasivo."
-)
 
 
 # ----------------------------- Constantes & helpers -----------------------------
